@@ -13,10 +13,13 @@ def get_transactions():
 
     for filename in FILENAMES:
         file = fitz.open(filename)
+        # Регулярные выражения для поиска данных
         pat_date = re.compile(r'(\d{2}.\d{2}.\d{4})')
         pat_time = re.compile(r'(\d{2}:\d{2}:\d{2})')
         pat_sum = re.compile(r'(\d+\sRUB)')
-        num_fields = 7
+
+        # Столбцы в выписке
+        num_fields = 6
         idx_transfer_date = 2
         print(f"Extracting transactions from: {filename}")
 
@@ -36,12 +39,26 @@ def get_transactions():
                     i += 1
                     continue
 
-                transfer_date, card_sum, debit, credit, text = rows[i + idx_transfer_date:i + num_fields]
+                # Извлечение информации о транзакции
+                transfer_date, card_sum, debit, text = rows[i + idx_transfer_date:i + num_fields]
                 next_col = i + num_fields
 
-                while next_col < len(rows) - 2 and not (pat_date.search(rows[next_col]) and len(rows[next_col]) == 10):
-                    text = ' '.join((text, rows[next_col]))
+                # Объединение многострочного текста в описание
+                text = text.strip()
+                while next_col < len(rows) - 2 and not (pat_date.search(rows[next_col]) and len(rows[next_col].strip()) == 10):
+                    print(f"Длина следующей колонки: {len(rows[next_col])}, текст: {rows[next_col]}")
+                    text = ' '.join((text, rows[next_col].strip()))
                     next_col += 1
+
+                # Разделяем кредит и описание
+                match = re.match(r'(\d+\s+\w+) (.*)', text)
+                if match:
+                    credit = match.group(1)
+                    description = match.group(2)
+
+                # Обрабатываем комиссию
+                if pat_sum.search(credit):
+                    credit = float(credit.replace(' RUB', '').strip())
 
                 transaction = {
                     'bank': 'VTB',
@@ -52,7 +69,7 @@ def get_transactions():
                     'card_sum': float(card_sum.replace(' RUB', '')),
                     'debit': float(debit),
                     'credit': float(credit),
-                    'text': text[1:].replace(' Спасибо, что Вы с нами! Всегда Ваш, Банк ВТБ (ПАО)', '').strip()
+                    'text': description.replace(' Спасибо, что Вы с нами! Всегда Ваш, Банк ВТБ (ПАО)', '').strip()
                 }
 
                 transactions.append(transaction)
